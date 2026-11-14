@@ -1,0 +1,17 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+const root=path.dirname(fileURLToPath(import.meta.url)),read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const coreData='data:text/javascript;base64,'+Buffer.from(read('vendor/three.core.min.js')).toString('base64');
+const three=read('vendor/three.module.min.js').replaceAll('./three.core.min.js',coreData);
+const threeData='data:text/javascript;base64,'+Buffer.from(three).toString('base64');
+const order=['engine','layout','operations','survival','storage','world','player','crew','audio','app'];
+const code=order.map(name=>read('src/'+name+'.js').replace(/^import .*;\r?\n/gm,'').replace(/\bexport (?=(?:const|let|function|class)\b)/g,'')).join('\n');
+let html=read('index.html').replace('<link rel="stylesheet" href="style.css">',()=>'<style>'+read('style.css')+read('operations.css')+'</style>');
+html=html.replace('<script type="module" src="src/app.js"></script>',()=>'<script type="module">import * as THREE from '+JSON.stringify(threeData)+';\n'+code+'</script>');
+html=html.replace('<link rel="stylesheet" href="operations.css">','');
+html=html.replace(/<script>if\(location\.protocol==='file:'\)[\s\S]*?<\/script>/,'');
+fs.mkdirSync(path.join(root,'dist'),{recursive:true});fs.writeFileSync(path.join(root,'dist/index.html'),html);fs.writeFileSync(path.join(root,'selene-3d.html'),html);
+fs.writeFileSync(path.join(root,'vendor/SHA256SUMS'),['three.module.min.js','three.core.min.js','LICENSE'].map(name=>crypto.createHash('sha256').update(fs.readFileSync(path.join(root,'vendor',name))).digest('hex')+'  '+name).join('\n')+'\n');
+console.log('Build listo: dist/index.html y selene-3d.html ('+Math.round(Buffer.byteLength(html)/1024)+' KiB), sin solicitudes externas.');

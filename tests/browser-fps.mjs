@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {fileURLToPath} from 'node:url';
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
+fs.mkdirSync(new URL('../captures/',import.meta.url),{recursive:true});
+const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true,args:['--enable-unsafe-swiftshader']});
+const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];
+page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+try{
+ await page.goto((process.env.BASE_URL||'http://127.0.0.1:4173')+'/?qa=1');await page.waitForFunction(()=>Boolean(window.seleneDebug));
+ await page.getByRole('button',{name:'Iniciar exploración'}).click();await page.waitForFunction(()=>seleneDebug.player.locked);
+ const yaw=await page.evaluate(()=>seleneDebug.player.yaw);await page.mouse.move(820,470);await page.waitForTimeout(250);assert.notEqual(await page.evaluate(()=>seleneDebug.player.yaw),yaw,'Mouse look');
+ await page.evaluate(()=>seleneDebug.player.setPose({x:6,z:-3,yaw:-Math.PI/2,pitch:0}));await page.keyboard.down('w');await page.waitForTimeout(1800);await page.keyboard.up('w');const wall=await page.evaluate(()=>seleneDebug.player.getPose());assert.ok(wall.x<=6.76&&wall.x>6,'Wall collision '+JSON.stringify(wall));
+ await page.evaluate(()=>seleneDebug.player.setPose({x:-5,z:0,yaw:Math.PI/2,pitch:0}));await page.keyboard.down('w');await page.waitForTimeout(2100);await page.keyboard.up('w');const doorway=await page.evaluate(()=>({pose:seleneDebug.player.getPose(),door:seleneDebug.world.doorStates[0].open}));assert.ok(doorway.door>.82&&doorway.pose.x<-7,'Automatic door / movement '+JSON.stringify(doorway));
+ await page.keyboard.press('m');await page.waitForTimeout(300);assert.equal(await page.evaluate(()=>seleneDebug.player.locked),false);assert.equal(await page.locator('#liveMap').count(),1);await page.screenshot({path:fileURLToPath(new URL('../captures/selene-map.png',import.meta.url))});
+ await page.keyboard.press('Escape');await page.getByRole('button',{name:'Continuar exploración'}).click();await page.waitForFunction(()=>seleneDebug.player.locked);assert.equal(await page.locator('#liveMap').count(),0,'Map must not remain on FPS');
+ await page.evaluate(()=>seleneDebug.player.setPose({x:-4,z:4.7,yaw:0,pitch:-.36}));await page.waitForTimeout(200);await page.keyboard.press('e');assert.equal(await page.evaluate(()=>seleneDebug.session.inventory.kit),true,'Physical kit pickup');
+ await page.evaluate(()=>seleneDebug.player.setPose({x:-18,z:5.4,yaw:0,pitch:-.45}));await page.waitForTimeout(200);await page.keyboard.press('e');assert.equal(await page.evaluate(()=>seleneDebug.session.inventory.maskOwned),true,'Physical mask pickup');
+ await page.keyboard.press('i');await page.getByRole('button',{name:'Equipar',exact:true}).click();assert.equal(await page.evaluate(()=>seleneDebug.session.inventory.maskEquipped),true);
+ await page.evaluate(()=>{seleneDebug.session.inventory.maskEquipped=false;seleneDebug.session.inventory.personalOxygen=10;seleneDebug.updateHUD()});assert.equal(await page.locator('#visionFx').getAttribute('data-tier'),'critical');assert.equal(await page.locator('#criticalOxygen').isVisible(),true);
+ await page.evaluate(()=>seleneDebug.show('settings'));await page.locator('[data-setting="reducedMotion"]').check();assert.equal(await page.evaluate(()=>document.body.classList.contains('pulsing')),false);await page.locator('[data-setting="fov"]').fill('88');await page.locator('[data-setting="fov"]').dispatchEvent('input');assert.equal(await page.evaluate(()=>seleneDebug.camera.fov),88);
+ await page.evaluate(()=>{seleneDebug.session.inventory.personalOxygen=40;seleneDebug.updateHUD();seleneDebug.show('station')});const before=await page.evaluate(()=>({o:seleneDebug.session.mission.oxygen,e:seleneDebug.session.mission.energy}));await page.getByRole('button',{name:'Recargar oxígeno personal',exact:true}).click();assert.deepEqual(await page.evaluate(()=>({p:seleneDebug.session.inventory.personalOxygen,o:seleneDebug.session.mission.oxygen,e:seleneDebug.session.mission.energy})),{p:65,o:before.o-25,e:before.e-4});
+ await page.evaluate(()=>{seleneDebug.session.mission.faults.air=true;seleneDebug.show('station')});assert.equal(await page.getByRole('button',{name:'Recargar oxígeno personal',exact:true}).isDisabled(),true);
+ await page.evaluate(()=>{seleneDebug.session.mission.faults.air=false;seleneDebug.show('terminal')});await page.waitForTimeout(500);assert.equal(await page.evaluate(()=>document.getElementById('viewport').parentElement.id),'cameraWindow');await page.screenshot({path:fileURLToPath(new URL('../captures/selene-terminal.png',import.meta.url))});
+ await page.getByRole('button',{name:/CAM 01/}).click();await page.waitForTimeout(200);assert.ok((await page.locator('#feedLabel').innerText()).includes('HÁBITAT'));
+ await page.evaluate(()=>{const pos=seleneDebug.camera.position;pos.set(-26.5,1.3,-3);seleneDebug.camera.rotation.set(0,-Math.PI/2,0,'YXZ');window.rayBlocked=seleneDebug.world.interactRay(seleneDebug.camera)});assert.equal(await page.evaluate(()=>Boolean(window.rayBlocked)),false,'No interaction through wall');
+ await page.evaluate(()=>seleneDebug.player.setPose({x:0,z:3.5,yaw:0,pitch:0}));await page.evaluate(()=>{seleneDebug.session.inventory.personalOxygen=78;seleneDebug.show('pause')});await page.getByRole('button',{name:'Guardar partida',exact:true}).click();await page.evaluate(()=>{seleneDebug.session.inventory.personalOxygen=3});await page.getByRole('button',{name:'Cargar guardado',exact:true}).click();assert.equal(await page.evaluate(()=>seleneDebug.session.inventory.personalOxygen),78);
+ await page.evaluate(()=>seleneDebug.start(0));assert.equal(await page.locator('#visionFx').getAttribute('data-tier'),'normal');assert.equal(await page.locator('#criticalOxygen').isVisible(),false);
+ assert.deepEqual(errors,[]);console.log('PASS browser: real WebGL, pointer lock, mouse look, WASD, solid walls, automatic doors, map separation, physical pickups, mask, oxygen FX, accessibility, settings, refill, blocked station, real camera feeds, ray occlusion, save/load, restart.');
+}finally{await browser.close()}
+

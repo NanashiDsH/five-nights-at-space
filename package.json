@@ -1,0 +1,1 @@
+{"name":"selene-3d-fps","version":"1.0.0","private":true,"type":"module","scripts":{"start":"node server.mjs","test":"node --test tests/*.test.js"},"dependencies":{"three":"0.180.0"}}
